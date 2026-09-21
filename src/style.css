@@ -203,6 +203,20 @@ dialog::backdrop { background: var(--cp-overlay); backdrop-filter: blur(5px); }
 .settings-fields .input-wrap { margin-top: 8px; }
 #targets-error { margin: 12px 0; }
 .backup-section { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--cp-border); }
+.account-section { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--cp-border); }
+#login-form { display: grid; gap: 10px; margin-top: 16px; }
+#login-form[hidden], #account-actions[hidden] { display: none; }
+#login-form label { font-size: 13px; }
+#login-form input { width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--cp-border-strong); border-radius: .625rem; background: var(--cp-surface); color: var(--cp-text); font: inherit; font-size: 16px; }
+#login-form button { margin-top: 8px; }
+#account-state { overflow-wrap: anywhere; }
+#cloud-conflict { border-top: 2px solid var(--cp-accent); padding: 20px 0; }
+#cloud-conflict h2 { font-size: 20px; }
+#conflict-fields { margin-top: 10px; font-size: 14px; overflow-wrap: anywhere; }
+#conflict-fields li { margin: 12px 0; }
+#conflict-fields span { display: block; margin-top: 4px; }
+#cloud-conflict .backup-actions { flex-wrap: wrap; }
+.page-footer { flex-wrap: wrap; }
 .backup-actions { display: flex; gap: 12px; margin: 16px 0; }
 .backup-actions button { flex: 1; }
 #settings-status { font-size: 13px; color: var(--cp-accent); margin-top: 16px; line-height: 1.6; }

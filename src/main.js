@@ -6,6 +6,9 @@ import { MEALS, STORAGE_KEY, localDate, shiftDate, validDate, initialState, pars
 import { messageFor } from './messages.mjs';
 import { mountThemeSettings } from './theme-review.js';
 import { THEME_KEY } from './theme-preferences.mjs';
+import { supabase, createTransport, loginErrorMessage } from './supabase.js';
+import { createCloudRepository } from './cloud-repository.mjs';
+import { sameState } from './cloud-state.mjs';
 
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip);
 const icons = { Cherry, Sunrise, Sun, Apple, Moon, ChevronLeft, ChevronRight, CalendarDays, Settings2, X, Download, Upload, Check, Sparkles, Heart, ArrowUpRight, ChartNoAxesCombined, NotebookPen, History, ArrowLeft, RotateCw, ShieldCheck };
@@ -13,7 +16,13 @@ const icon = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 const number = value => value === null ? '–' : new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(value);
 const escape = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const dateLabel = (date, options = { day: 'numeric', month: 'long' }) => new Date(`${date}T12:00:00`).toLocaleDateString('fr-FR', options);
-const repository = createRepository({ getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value) });
+const storage = { getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value) };
+const localRepository = createRepository(storage);
+let repository = localRepository;
+let account = null;
+let cloud = null;
+let deferredRender = false;
+let authBusy = false;
 let state = initialState();
 let blocked = false;
 let pending = [];
@@ -43,7 +52,8 @@ document.querySelector('#app').innerHTML = `
   <div class="page-wrap">
     <div id="storage-warning" role="alert" ${blocked ? '' : 'hidden'}>Les données de cet appareil sont illisibles ou inaccessibles. Elles n’ont pas été écrasées. Ouvre les paramètres pour exporter ou restaurer une sauvegarde.</div>
     <main id="main" tabindex="-1"></main>
-    <footer class="page-footer"><span>${icon('heart')} À ton rythme. Toujours.</span><span id="save-status">${icon('shield-check')} Sur cet appareil</span><button id="retry-save" class="text-button" hidden>${icon('rotate-cw')} Réessayer</button></footer>
+    <section id="cloud-conflict" role="alert" hidden><h2>Deux versions à départager</h2><ul id="conflict-fields"></ul><div class="backup-actions"><button id="keep-local" class="secondary-button">Garder mes valeurs</button><button id="keep-remote" class="secondary-button">Garder les valeurs en ligne</button></div></section>
+    <footer class="page-footer"><span>${icon('heart')} À ton rythme. Toujours.</span><span id="save-status">${icon('shield-check')} Sur cet appareil</span><button id="retry-save" class="text-button" hidden>${icon('rotate-cw')} Réessayer</button><button id="open-account" class="text-button">Se connecter</button></footer>
   </div>
   <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
   <dialog id="settings-dialog" aria-labelledby="settings-title">
@@ -53,7 +63,13 @@ document.querySelector('#app').innerHTML = `
       <div class="settings-fields"><label>Calories<span class="input-wrap"><input id="target-calories" name="calories" inputmode="decimal" autocomplete="off" required aria-describedby="targets-error"><span>kcal</span></span></label><label>Protéines<span class="input-wrap"><input id="target-protein" name="protein" inputmode="decimal" autocomplete="off" required aria-describedby="targets-error"><span>g</span></span></label></div>
       <p id="targets-error" class="field-error" role="alert"></p><button type="submit" class="primary-button">${icon('check')} Enregistrer les objectifs</button>
     </form>
-    <section class="backup-section"><h3>Ton historique, à garder</h3><div class="backup-actions"><button id="export-data" class="secondary-button">${icon('download')} Exporter</button><button id="import-data" class="secondary-button">${icon('upload')} Importer</button><input type="file" id="backup-file" accept=".json,application/json" hidden></div><p class="muted">Données enregistrées uniquement dans ce navigateur, sans synchronisation. Une sauvegarde les protège si tu effaces les données du navigateur.</p></section>
+    <section class="account-section" aria-labelledby="account-title"><h3 id="account-title">Ton compte</h3>
+      <p id="account-state" class="muted">Journal local · non connecté</p>
+      <form id="login-form"><label for="login-email">Adresse e-mail</label><input id="login-email" type="email" autocomplete="username" required maxlength="254"><label for="login-password">Mot de passe</label><input id="login-password" type="password" autocomplete="current-password" required><button class="primary-button" type="submit">${icon('shield-check')} Se connecter</button></form>
+      <div id="account-actions" hidden><div class="backup-actions"><button id="sync-now" class="secondary-button">${icon('rotate-cw')} Synchroniser</button><button id="sign-out" class="secondary-button">Se déconnecter</button></div></div>
+      <p id="auth-status" role="status" class="muted"></p>
+    </section>
+    <section class="backup-section"><h3>Ton historique, à garder</h3><div class="backup-actions"><button id="export-data" class="secondary-button">${icon('download')} Exporter</button><button id="import-data" class="secondary-button">${icon('upload')} Importer</button><input type="file" id="backup-file" accept=".json,application/json" hidden></div><p id="backup-note" class="muted">Données enregistrées uniquement dans ce navigateur, sans synchronisation. Une sauvegarde les protège si tu effaces les données du navigateur.</p></section>
     <p id="settings-status" role="status"></p>
     <div class="dialog-note">${icon('shield-check')} <span>Ton journal n’est pas publié sur GitHub.</span></div>
   </dialog>`;
@@ -70,7 +86,7 @@ function announce(message) {
 
 function updateSaveStatus() {
   document.querySelector('#save-status').innerHTML = `${icon(pending.length ? 'rotate-cw' : 'shield-check')} ${escape(status)}`;
-  document.querySelector('#retry-save').hidden = !pending.length;
+  document.querySelector('#retry-save').hidden = !pending.length && (!cloud || status === 'Synchronisé');
   refreshIcons();
 }
 
@@ -80,7 +96,7 @@ function commit(change) {
   try {
     state = repository.update(latest => pending.reduce((current, update) => update(current), latest));
     pending = [];
-    status = 'Enregistré sur cet appareil';
+    status = cloud ? cloud.details().status : 'Enregistré sur cet appareil';
     document.querySelector('#storage-warning').hidden = true;
     announce(status);
     updateSaveStatus();
@@ -251,6 +267,10 @@ document.querySelector('#open-settings').addEventListener('click', () => {
   document.querySelector('#targets-form button').disabled = blocked;
   dialog.showModal();
 });
+document.querySelector('#open-account').addEventListener('click', () => {
+  document.querySelector('#open-settings').click();
+  document.querySelector(account ? '#sync-now' : '#login-email').focus();
+});
 document.querySelector('#close-settings').addEventListener('click', () => dialog.close());
 document.querySelector('#targets-form').addEventListener('submit', event => {
   event.preventDefault();
@@ -266,10 +286,10 @@ document.querySelector('#targets-form').addEventListener('submit', event => {
   } catch (error) { document.querySelector('#targets-error').textContent = error.message; }
 });
 
-document.querySelector('#retry-save').addEventListener('click', () => { commit(); if (canNavigate()) render(); });
+document.querySelector('#retry-save').addEventListener('click', () => { if (pending.length) commit(); cloud?.sync(); if (canNavigate()) render(); });
 document.querySelector('#export-data').addEventListener('click', () => {
   try {
-    const content = blocked ? window.localStorage.getItem(STORAGE_KEY) : JSON.stringify(state, null, 2);
+    const content = blocked ? window.localStorage.getItem(cloud?.key ?? STORAGE_KEY) : JSON.stringify(state, null, 2);
     if (!content) throw new Error('Aucune donnée accessible à exporter.');
     const blob = new Blob([content], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -289,7 +309,7 @@ document.querySelector('#backup-file').addEventListener('change', async event =>
     if (file.size > 5 * 1024 * 1024) throw new Error('Le fichier dépasse 5 Mo.');
     const imported = importState(await file.text());
     const count = Object.keys(imported.days).length;
-    const confirmation = `Remplacer tout le journal de ce navigateur par cette sauvegarde (${count} journée(s)) ? Les données actuelles, y compris les saisies non enregistrées, seront remplacées. Exporte-les d’abord si tu souhaites les conserver.`;
+    const confirmation = `Remplacer tout le journal ${account ? 'de ce compte, sur tous les appareils' : 'de ce navigateur'} par cette sauvegarde (${count} journée(s)) ? Les données actuelles, y compris les saisies non enregistrées, seront remplacées. Exporte-les d’abord si tu souhaites les conserver.`;
     if (!window.confirm(confirmation)) return;
     const saved = repository.save(imported);
     state = saved;
@@ -313,7 +333,8 @@ window.addEventListener('beforeunload', event => {
 });
 window.addEventListener('storage', event => {
   if (event.key === THEME_KEY || event.key === null) themeSettings.refresh();
-  if (event.key !== STORAGE_KEY || pending.length || main.querySelector('[aria-invalid="true"]')) return;
+  if (cloud && event.key === cloud.key) { refreshCloud(); return; }
+  if (cloud || event.key !== STORAGE_KEY || pending.length || main.querySelector('[aria-invalid="true"]')) return;
   try { state = repository.load(); render(); }
   catch { announce('Les données ont changé dans un autre onglet et ne peuvent pas être lues.'); }
 });
@@ -329,6 +350,117 @@ function checkNewDay() {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewDay(); });
 window.addEventListener('focus', checkNewDay);
 setInterval(checkNewDay, 30000);
+function refreshCloud() {
+  if (!cloud) return;
+  try {
+    const details = cloud.details();
+    if (!pending.length && !sameState(state, details.state)) {
+      state = details.state;
+      if (main.querySelector(':focus') || main.querySelector('[aria-invalid="true"]')) deferredRender = true;
+      else render();
+    }
+    if (!pending.length) status = details.status;
+    document.querySelector('#cloud-conflict').hidden = !details.conflict;
+    document.querySelector('#conflict-fields').innerHTML = details.conflict
+      ? details.conflict.fields.map(field => {
+        const [date, meal, metric] = field.split('/');
+        const label = `${dateLabel(date, { day: 'numeric', month: 'long', year: 'numeric' })} · ${MEALS.find(item => item.id === meal)?.label ?? 'Objectifs'}${metric ? ` · ${metric === 'calories' ? 'Calories' : 'Protéines'}` : ''}`;
+        const value = journal => {
+          if (meal === 'targets') {
+            const target = journal.targets.find(item => item.from === date);
+            return target ? `${number(target.calories)} kcal / ${number(target.protein)} g` : 'Absent';
+          }
+          const amount = journal.days[date]?.[meal]?.[metric];
+          return amount === null || amount === undefined ? 'Vide' : `${number(amount)} ${metric === 'calories' ? 'kcal' : 'g'}`;
+        };
+        return `<li><strong>${escape(label)}</strong><span>Cet appareil : ${escape(value(details.state))} · En ligne : ${escape(value(details.conflict.state))}</span></li>`;
+      }).join('') : '';
+    updateSaveStatus();
+  } catch {
+    blocked = true;
+    document.querySelector('#storage-warning').hidden = false;
+    status = 'Brouillon inaccessible';
+    updateSaveStatus();
+  }
+}
+
+function switchAccount(user) {
+  if ((user?.id ?? null) === (account?.id ?? null)) return;
+  cloud?.dispose();
+  deferredRender = false;
+  account = user;
+  pending = [];
+  cloud = user ? createCloudRepository({
+    owner: user.id, storage, transport: createTransport(user.id),
+    lock: (name, action) => navigator.locks ? navigator.locks.request(name, action) : action(),
+    notify: () => queueMicrotask(refreshCloud),
+  }) : null;
+  repository = cloud ?? localRepository;
+  state = initialState();
+  blocked = false;
+  try { state = repository.load(); } catch { blocked = true; }
+  status = user ? 'En attente de synchronisation' : 'Sur cet appareil';
+  document.querySelector('#storage-warning').hidden = !blocked;
+  document.querySelector('#cloud-conflict').hidden = true;
+  document.querySelector('#login-form').hidden = Boolean(user);
+  document.querySelector('#account-actions').hidden = !user;
+  document.querySelector('#account-state').textContent = user ? `Connecté · ${user.email ?? ''}` : 'Journal local · non connecté';
+  document.querySelector('#open-account').textContent = user ? 'Mon compte' : 'Se connecter';
+  document.querySelector('#login-password').value = '';
+  document.querySelector('#auth-status').textContent = '';
+  document.querySelector('#backup-note').textContent = user
+    ? 'Journal privé synchronisé avec ton compte. Les brouillons restent dans ce navigateur, sans chiffrement local. Déconnecte-toi sur un appareil partagé.'
+    : 'Données enregistrées uniquement dans ce navigateur, sans synchronisation. Une sauvegarde les protège si tu effaces les données du navigateur.';
+  const targets = targetsFor(state, today);
+  document.querySelector('#target-calories').value = String(targets.calories).replace('.', ',');
+  document.querySelector('#target-protein').value = String(targets.protein).replace('.', ',');
+  document.querySelector('#targets-form button').disabled = blocked;
+  render();
+  updateSaveStatus();
+  if (!blocked) cloud?.sync();
+}
+
+document.querySelector('#login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (authBusy || pending.length || !canNavigate()) return;
+  authBusy = true;
+  const button = event.target.querySelector('button');
+  button.disabled = true;
+  const authStatus = document.querySelector('#auth-status');
+  authStatus.textContent = 'Connexion en cours…';
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email: document.querySelector('#login-email').value.trim(), password: document.querySelector('#login-password').value });
+    if (error) throw error;
+    switchAccount(data.user);
+    authStatus.textContent = 'Connexion réussie.';
+  } catch (error) { authStatus.textContent = loginErrorMessage(error); }
+  finally { document.querySelector('#login-password').value = ''; button.disabled = false; authBusy = false; }
+});
+document.querySelector('#sign-out').addEventListener('click', async () => {
+  if (authBusy || pending.length || !canNavigate()) return;
+  authBusy = true;
+  try {
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) throw error;
+    switchAccount(null);
+    document.querySelector('#auth-status').textContent = 'Déconnecté. Les brouillons du compte sont conservés sur cet appareil.';
+  } catch { document.querySelector('#auth-status').textContent = 'Déconnexion impossible. Réessaie.'; }
+  finally { authBusy = false; }
+});
+document.querySelector('#sync-now').addEventListener('click', () => cloud?.sync());
+for (const [id, choice] of [['keep-local', 'local'], ['keep-remote', 'remote']]) {
+  document.querySelector(`#${id}`).addEventListener('click', () => {
+    if (!canNavigate() || !window.confirm('Appliquer ce choix aux valeurs en conflit ? Les autres modifications seront conservées.')) return;
+    try { cloud?.resolve(choice); refreshCloud(); } catch { announce('Impossible de conserver ce choix. Réessaie.'); }
+  });
+}
+main.addEventListener('focusout', () => setTimeout(() => {
+  if (deferredRender && !main.querySelector(':focus') && !main.querySelector('[aria-invalid="true"]')) { deferredRender = false; render(); }
+}, 0));
+window.addEventListener('online', () => cloud?.sync());
+window.addEventListener('focus', () => cloud?.sync());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) cloud?.sync(); });
+setInterval(() => { if (!document.hidden) cloud?.sync(); }, 30000);
 const themeSettings = mountThemeSettings({
     onThemeChange() {
       if (!chart) return;
@@ -346,3 +478,8 @@ const themeSettings = mountThemeSettings({
     },
 });
 render();
+supabase.auth.onAuthStateChange((_event, session) => queueMicrotask(() => switchAccount(session?.user ?? null)));
+supabase.auth.getSession().then(({ data, error }) => {
+  if (error) throw error;
+  switchAccount(data.session?.user ?? null);
+}).catch(() => { document.querySelector('#auth-status').textContent = 'Session indisponible. Reconnecte-toi pour synchroniser.'; });

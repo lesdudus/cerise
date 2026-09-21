@@ -1,0 +1,21 @@
+project_id = "cerise"
+
+[auth]
+enabled = true
+site_url = "https://lesdudus.github.io/cerise/"
+additional_redirect_urls = ["https://lesdudus.github.io/cerise/", "http://127.0.0.1:5212/", "http://192.168.1.15:5215/"]
+enable_signup = false
+enable_anonymous_sign_ins = false
+minimum_password_length = 12
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+secure_password_change = true
+max_frequency = "1m"
+otp_length = 8

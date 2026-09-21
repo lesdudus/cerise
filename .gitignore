@@ -17,6 +17,8 @@ playwright-report
 .env.*
 !.env.example
 cerise-*.json
+supabase/.temp/
+supabase/.branches/
 
 # Editor directories and files
 .vscode/*
