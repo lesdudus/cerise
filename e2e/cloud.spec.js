@@ -1,8 +1,14 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { initialState, setEntry, localDate, STORAGE_KEY } from '../src/model.mjs';
+import { initialState, setEntry, STORAGE_KEY } from '../src/model.mjs';
 import { cloudKey } from '../src/cloud-repository.mjs';
 import { THEME_KEY } from '../src/theme-preferences.mjs';
+
+const currentDay = '2026-09-22';
+const clockTime = new Date('2026-09-21T23:30:00Z');
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(clockTime);
+});
 
 const owner = '11111111-1111-4111-8111-111111111111';
 const email = 'cerise-test@example.invalid';
@@ -70,8 +76,8 @@ for (const width of [1440, 390]) {
     await page.locator('#lunch-protein').fill('25,5');
     await page.locator('#open-account').click();
     await page.locator('#sync-now').click();
-    await expect.poll(() => server.snapshot.state.days[localDate()]?.lunch?.protein).toBe(25.5);
-    expect(server.snapshot.state.days[localDate()].breakfast.calories).toBe(0);
+    await expect.poll(() => server.snapshot.state.days[currentDay]?.lunch?.protein).toBe(25.5);
+    expect(server.snapshot.state.days[currentDay].breakfast.calories).toBe(0);
     await page.reload();
     await expect(page.locator('#lunch-protein')).toHaveValue('25,5');
     expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
@@ -93,13 +99,14 @@ test('Two devices merge, recover offline edits and require explicit conflict res
     await mockCloud(context, server);
     await mockCloud(secondContext, server);
     const second = await secondContext.newPage();
+    await second.clock.setFixedTime(clockTime);
     await login(page);
     await login(second);
     await page.locator('#close-settings').click();
     await page.locator('#breakfast-calories').fill('400');
     await page.locator('#open-account').click();
     await page.locator('#sync-now').click();
-    await expect.poll(() => server.snapshot.state.days[localDate()]?.breakfast?.calories).toBe(400);
+    await expect.poll(() => server.snapshot.state.days[currentDay]?.breakfast?.calories).toBe(400);
     await second.locator('#sync-now').click();
     await expect(second.locator('#breakfast-calories')).toHaveValue('400');
     server.offline = true;
@@ -110,19 +117,19 @@ test('Two devices merge, recover offline edits and require explicit conflict res
     await expect(page.locator('#save-status')).toContainText('indisponible');
     await page.reload();
     await expect(page.locator('#breakfast-calories')).toHaveValue('500');
-    server.snapshot = { revision: server.snapshot.revision + 1, state: setEntry(server.snapshot.state, localDate(), 'breakfast', 'calories', 600) };
+    server.snapshot = { revision: server.snapshot.revision + 1, state: setEntry(server.snapshot.state, currentDay, 'breakfast', 'calories', 600) };
     server.offline = false;
     await page.locator('#open-account').click();
     await page.locator('#sync-now').click();
     await expect(page.locator('#cloud-conflict')).toBeVisible();
     await expect(page.locator('#conflict-fields')).toContainText('Cet appareil : 500 kcal · En ligne : 600 kcal');
-    expect(server.snapshot.state.days[localDate()].breakfast.calories).toBe(600);
+    expect(server.snapshot.state.days[currentDay].breakfast.calories).toBe(600);
     await page.locator('#close-settings').click();
     page.once('dialog', dialog => dialog.accept());
     await page.locator('#keep-local').click();
     await page.locator('#open-account').click();
     await page.locator('#sync-now').click();
-    await expect.poll(() => server.snapshot.state.days[localDate()].breakfast.calories).toBe(500);
+    await expect.poll(() => server.snapshot.state.days[currentDay].breakfast.calories).toBe(500);
     await second.locator('#sync-now').click();
     await expect(second.locator('#breakfast-calories')).toHaveValue('500');
   } finally { await secondContext.close(); }
@@ -146,6 +153,7 @@ test('Signing in keeps the local journal and themes separate, and signing out cl
   await page.locator('#sync-now').click();
   await expect.poll(() => server.saves).toBeGreaterThan(0);
   const second = await context.newPage();
+  await second.clock.setFixedTime(clockTime);
   await second.goto('/');
   await expect(second.locator('#lunch-protein')).toHaveValue('40');
   await page.locator('#sign-out').click();
