@@ -109,4 +109,6 @@ Après un changement de configuration, vérifier `/auth/v1/settings` avec la cl�
 
 ## Crédit visuel
 
-Photographie de cerises : [Pexels, photo 109274](https://www.pexels.com/photo/red-cherries-109274/), distribuée sous la [licence Pexels](https://www.pexels.com/license/). Une copie optimisée est incluse dans les sources pour éviter les requêtes externes. Icônes : Lucide. Graphiques : Chart.js.
+Visuel actuel : [Red Cherry fruit 512x512, PNGimg, image 635](https://pngimg.com/image/635), sous [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Le PNG transparent est conservé sans modification dans `src/assets/cherries.png` et incorporé à la compilation. L'attribution figure aussi dans les paramètres. Réutilisation non commerciale uniquement ; vérifier ou remplacer ce visuel avant tout usage commercial.
+
+Photographie d'origine sur fond blanc : [Pexels, photo 109274](https://www.pexels.com/photo/red-cherries-109274/), distribuée sous la [licence Pexels](https://www.pexels.com/license/). Le fichier `src/assets/cherries.jpg` reste conservé sans modification dans le dépôt pour permettre un retour à ce visuel. Il n'est plus utilisé ni incorporé dans la version actuelle. Icônes : Lucide. Graphiques : Chart.js.

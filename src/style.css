@@ -132,8 +132,9 @@ main:focus { outline: none; }
 .daily-note .eyebrow svg { width: 16px; height: 16px; }
 .quote-layout { display: grid; grid-template-columns: minmax(0, 1fr) 90px; align-items: center; gap: 8px; }
 blockquote { margin: 8px 0; font-size: 21px; line-height: 1.45; font-weight: 600; }
-.quote-layout img { width: 90px; height: 110px; object-fit: cover; object-position: center; mix-blend-mode: multiply; }
-html[data-theme="dark"] .quote-layout img { mix-blend-mode: normal; border-radius: .625rem; }
+.quote-layout img { width: 90px; height: 110px; object-fit: contain; object-position: center; }
+.image-credit { margin: 16px 0 0; font-size: 11px; color: var(--cp-text-muted); }
+.image-credit a { color: var(--cp-link); }
 .note-signature { font-size: 11px; margin-top: 12px; color: var(--cp-text-muted); }
 .page-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; justify-content: space-between; border-top: 1px solid var(--cp-border); padding: 20px 0 28px; font-size: 11px; color: var(--cp-text-muted); }
 .page-footer > span { display: flex; align-items: center; gap: 7px; }

@@ -23,6 +23,58 @@ test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date('2026-09-21T12:00:00+02:00') });
 });
 
+test('Cherry image stays transparent and contained across themes and screen sizes', async ({ page }, testInfo) => {
+  await page.goto('/');
+  const pixels = await page.locator('.quote-layout img').evaluate(async image => {
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    const alphaAt = (left, top) => data[(top * canvas.width + left) * 4 + 3];
+    let opaqueRed = 0;
+    let opaqueStem = 0;
+    let transparent = 0;
+    for (let offset = 0; offset < data.length; offset += 4) {
+      if (data[offset + 3] === 0) transparent += 1;
+      if (data[offset + 3] < 240) continue;
+      if (data[offset] > data[offset + 1] * 1.5 && data[offset] > data[offset + 2] * 1.5) opaqueRed += 1;
+      if (offset / 4 < canvas.width * canvas.height / 2 && data[offset] > data[offset + 2] * 1.3) opaqueStem += 1;
+    }
+    return {
+      corners: [alphaAt(0, 0), alphaAt(canvas.width - 1, 0), alphaAt(0, canvas.height - 1), alphaAt(canvas.width - 1, canvas.height - 1)],
+      transparentRatio: transparent / (canvas.width * canvas.height),
+      opaqueRed,
+      opaqueStem,
+    };
+  });
+  expect(pixels.corners).toEqual([0, 0, 0, 0]);
+  expect(pixels.transparentRatio).toBeGreaterThan(0.5);
+  expect(pixels.opaqueRed).toBeGreaterThan(1000);
+  expect(pixels.opaqueStem).toBeGreaterThan(100);
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 950 });
+    for (const palette of palettes) {
+      await selectPalette(page, palette);
+      await expect(page.locator('.quote-layout img')).toBeVisible();
+      await expect(page.locator('.quote-layout img')).toHaveCSS('object-fit', 'contain');
+      await expect(page.locator('.quote-layout img')).toHaveCSS('mix-blend-mode', 'normal');
+      await expect(page.locator('.quote-layout img')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const contained = await page.locator('.quote-layout img').evaluate(image => {
+        const bounds = image.getBoundingClientRect();
+        const parent = image.parentElement.getBoundingClientRect();
+        const quote = image.previousElementSibling.getBoundingClientRect();
+        return bounds.left >= quote.right && bounds.right <= parent.right + 1 && bounds.bottom <= parent.bottom + 1;
+      });
+      expect(contained).toBe(true);
+      await page.locator('.daily-note').screenshot({ path: testInfo.outputPath(`cherries-${palette}-${width}.png`) });
+    }
+  }
+});
+
 for (const width of [1440, 390]) {
   for (const palette of palettes) {
     test(`${palette} à ${width}px : contrastes, états, paramètres et graphiques`, async ({ page }, testInfo) => {

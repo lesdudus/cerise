@@ -1,5 +1,5 @@
 import './style.css';
-import cherryPhoto from './assets/cherries.jpg';
+import cherryPhoto from './assets/cherries.png';
 import { createIcons, Cherry, Sunrise, Sun, Apple, Moon, ChevronLeft, ChevronRight, CalendarDays, Settings2, X, Download, Upload, Check, Sparkles, Heart, ArrowUpRight, ChartNoAxesCombined, NotebookPen, History, ArrowLeft, RotateCw, ShieldCheck } from 'lucide';
 import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip } from 'chart.js';
 import { MEALS, STORAGE_KEY, localDate, shiftDate, validDate, initialState, parseAmount, setEntry, setTargets, targetsFor, daySummary, periodSummary, importState, createRepository } from './model.mjs';
@@ -72,6 +72,7 @@ document.querySelector('#app').innerHTML = `
     <section class="backup-section"><h3>Ton historique, à garder</h3><div class="backup-actions"><button id="export-data" class="secondary-button">${icon('download')} Exporter</button><button id="import-data" class="secondary-button">${icon('upload')} Importer</button><input type="file" id="backup-file" accept=".json,application/json" hidden></div><p id="backup-note" class="muted">Données enregistrées uniquement dans ce navigateur, sans synchronisation. Une sauvegarde les protège si tu effaces les données du navigateur.</p></section>
     <p id="settings-status" role="status"></p>
     <div class="dialog-note">${icon('shield-check')} <span>Ton journal n’est pas publié sur GitHub.</span></div>
+    <p class="image-credit">Image de cerises : <a href="https://pngimg.com/image/635" target="_blank" rel="noopener noreferrer">PNGimg</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener noreferrer">CC BY-NC 4.0</a>.</p>
   </dialog>`;
 
 const main = document.querySelector('#main');
@@ -151,7 +152,7 @@ function renderToday() {
     ${!isToday ? `<button class="text-button return-today" data-action="return-today">${icon('arrow-left')} Revenir à aujourd’hui</button>` : ''}
     <div class="journal-layout"><section class="meals-section" aria-labelledby="meals-title"><div class="section-heading"><h2 id="meals-title">Au fil des repas<span class="small-dot">.</span></h2><span class="subtle-label">${dateLabel(selectedDate, { weekday: 'long' })}</span></div><form id="meals-form" novalidate>${MEALS.map(mealMarkup).join('')}</form></section>
     <aside class="day-aside"><div class="section-heading"><h2>Le point du jour</h2><span class="small-tag">${isToday ? 'Aujourd’hui' : dateLabel(selectedDate)}</span></div><div id="day-summary" class="day-summary">${summaryMarkup()}</div>
-    <section class="daily-note" aria-label="La pensée du jour"><p class="eyebrow">${icon('sparkles')} LA TOUCHE CERISE</p><div class="quote-layout"><blockquote>${escape(messageFor(today))}</blockquote><img src="${cherryPhoto}" alt="Deux cerises rouges" width="800" height="532"></div><p class="note-signature">Un peu de suivi. Beaucoup de douceur.</p></section></aside></div>`;
+    <section class="daily-note" aria-label="La pensée du jour"><p class="eyebrow">${icon('sparkles')} LA TOUCHE CERISE</p><div class="quote-layout"><blockquote>${escape(messageFor(today))}</blockquote><img src="${cherryPhoto}" alt="Deux cerises rouges avec une feuille verte" width="512" height="512"></div><p class="note-signature">Un peu de suivi. Beaucoup de douceur.</p></section></aside></div>`;
   main.querySelector('#meals-form').addEventListener('submit', event => event.preventDefault());
   main.querySelectorAll('[data-meal]').forEach(input => {
     input.addEventListener('input', () => {
