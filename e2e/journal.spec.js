@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { readFile } from 'node:fs/promises';
 import { initialState, setEntry, STORAGE_KEY } from '../src/model.mjs';
+import { THEME_KEY, THEME_IDS } from '../src/theme-preferences.mjs';
 
 const currentDay = '2026-09-21';
 const storage = page => page.evaluate(key => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
@@ -9,6 +10,9 @@ const upload = (page, content) => page.locator('#backup-file').setInputFiles({ n
 
 test.beforeEach(async ({ page }) => {
   await page.clock.install({ time: new Date('2026-09-21T12:00:00+02:00') });
+  await page.addInitScript(({ key, ids }) => {
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, daily: false, current: 'original', date: '2026-09-21', remaining: ids.filter(id => id !== 'original') }));
+  }, { key: THEME_KEY, ids: THEME_IDS });
 });
 
 test('Saisies facultatives, décimales, persistance et historique', async ({ page }) => {
@@ -115,8 +119,7 @@ for (const width of [1440, 768, 390, 320]) {
     await expect(page.locator('.quote-layout img')).toBeVisible();
     expect(await page.locator('.quote-layout img').evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
     if (width === 390) {
-      await expect(page.locator('#theme-review')).toBeVisible();
-      await page.evaluate(() => window.scrollTo(0, document.querySelector('#app').offsetTop));
+      await expect(page.locator('#theme-review')).toHaveCount(0);
       const firstViewport = await page.evaluate(() => ({
         quoteVisible: document.querySelector('.daily-note').getBoundingClientRect().bottom < innerHeight - 72,
         summaryVisible: document.querySelector('#day-summary').getBoundingClientRect().bottom < innerHeight - 72,
@@ -194,6 +197,9 @@ test('Thème sombre et paramètres accessibles sur mobile', async ({ page }, tes
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Paramètres', exact: true }).click();
+  await page.locator('[name="color-theme"][value="cerise"]').check();
+  await page.keyboard.press('Escape');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.locator('#lunch-calories').fill('520');
   await page.screenshot({ path: testInfo.outputPath('journal-sombre.png'), fullPage: true });

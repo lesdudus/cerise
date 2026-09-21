@@ -3,6 +3,70 @@ import assert from 'node:assert/strict';
 import { initialState, parseAmount, setEntry, setTargets, targetsFor, daySummary, periodSummary, importState, validateState, validDate, shiftDate, localDate, createRepository, STORAGE_KEY } from '../src/model.mjs';
 import { messages, messageFor } from '../src/messages.mjs';
 import { createPreviewStorage, previewState } from '../src/theme-preview.mjs';
+import { THEME_KEY, THEME_IDS, nextThemeDay, selectTheme, readThemeState, createThemePreferences } from '../src/theme-preferences.mjs';
+
+test('Les thèmes font des cycles complets sans répétition, même entre deux cycles', () => {
+  for (const random of [() => 0, () => 0.5, () => 0.999]) {
+    let state = null;
+    let previous;
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      const seen = [];
+      for (let day = 0; day < 6; day += 1) {
+        const date = shiftDate('2026-09-21', cycle * 6 + day);
+        state = nextThemeDay(state, date, random);
+        assert.notEqual(state.current, previous);
+        assert.deepEqual(nextThemeDay(state, date, random), state);
+        seen.push(state.current);
+        previous = state.current;
+      }
+      assert.deepEqual([...seen].sort(), [...THEME_IDS].sort());
+    }
+  }
+});
+
+test('Un choix manuel redémarre le cycle ; le mode fixe conserve le thème', () => {
+  const initial = nextThemeDay(null, '2026-09-21', () => 0.5);
+  const manual = selectTheme(initial, 'petrole', '2026-09-21', () => 0);
+  assert.equal(manual.daily, true);
+  assert.equal(manual.remaining.length, 5);
+  assert.ok(!manual.remaining.includes('petrole'));
+  assert.deepEqual(nextThemeDay(manual, '2026-09-21'), manual);
+  assert.deepEqual(nextThemeDay(manual, '2026-09-20'), manual);
+  const resumed = nextThemeDay(manual, '2026-10-12');
+  assert.equal(resumed.remaining.length, 4);
+  const fixed = { ...manual, daily: false };
+  assert.deepEqual(nextThemeDay(fixed, '2027-01-01'), fixed);
+});
+
+test('Les préférences de thème sont partagées entre onglets et séparées du journal', () => {
+  const values = new Map([[STORAGE_KEY, 'untouched']]);
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  const first = createThemePreferences(storage, () => 0);
+  const second = createThemePreferences(storage, () => 0.5);
+  first.refresh('2026-09-21');
+  first.select('original', '2026-09-21');
+  assert.equal(second.refresh('2026-09-21').state.current, 'original');
+  assert.deepEqual(first.refresh('2026-09-22').state, second.refresh('2026-09-22').state);
+  first.setDaily(false, '2026-09-22');
+  assert.equal(second.refresh('2026-09-23').state.daily, false);
+  assert.equal(values.get(STORAGE_KEY), 'untouched');
+  values.set(THEME_KEY, '{invalid');
+  assert.equal(first.refresh('2026-09-23').persisted, true);
+  assert.ok(readThemeState(values.get(THEME_KEY)));
+  assert.equal(readThemeState(JSON.stringify({ ...first.refresh('2026-09-23').state, remaining: ['cobalt', 'cobalt'] })), null);
+  const unavailable = createThemePreferences({ getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } });
+  const result = unavailable.refresh('2026-09-21');
+  assert.equal(result.persisted, false);
+  assert.deepEqual(unavailable.refresh('2026-09-21').state, result.state);
+  let full = true;
+  const quota = createThemePreferences({ getItem: storage.getItem, setItem(key, value) { if (full) throw new Error('full'); storage.setItem(key, value); } });
+  const unsaved = quota.select('studio', '2026-09-23');
+  assert.equal(unsaved.persisted, false);
+  assert.deepEqual(quota.refresh('2026-09-23').state, unsaved.state);
+  full = false;
+  assert.equal(quota.refresh('2026-09-23').persisted, true);
+  assert.equal(readThemeState(values.get(THEME_KEY)).current, 'studio');
+});
 
 test('La comparaison utilise des exemples identiques et un stockage uniquement en mémoire', () => {
   const date = '2026-09-21';

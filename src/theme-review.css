@@ -1,35 +1,15 @@
-:root {
-  --cp-review-bg: #1b1e24;
-  --cp-review-surface: #252932;
-  --cp-review-text: #f0f2f6;
-  --cp-review-muted: #b9c1cd;
-  --cp-review-border: #707b8a;
-  --cp-review-active: #394353;
-}
-#theme-review { background: var(--cp-review-bg); color: var(--cp-review-text); border-bottom: 1px solid var(--cp-review-border); color-scheme: dark; }
-.review-inner { max-width: 1200px; padding: 16px 36px; margin: auto; }
-.review-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; margin-bottom: 14px; }
-.review-heading > span { color: var(--cp-review-muted); font-size: 11px; }
-.review-heading a { margin-left: auto; color: var(--cp-review-text); font-size: 12px; text-underline-offset: 3px; }
-.theme-options { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 0; border: 0; padding: 0; }
-.theme-option { display: flex; flex-direction: column; align-items: center; gap: 7px; cursor: pointer; position: relative; border: 1px solid var(--cp-review-border); border-radius: 8px; padding: 10px 6px; background: var(--cp-review-surface); }
-.theme-option:has(:checked) { outline: 2px solid var(--cp-review-text); outline-offset: 1px; background: var(--cp-review-active); }
-.theme-option input, .example-options input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.theme-option:has(:focus-visible), .example-options label:has(:focus-visible) { outline: 3px dashed var(--cp-review-text); outline-offset: 3px; }
-.theme-swatch { display: grid; grid-template-columns: repeat(4, 1fr); width: 84px; height: 16px; border-radius: 4px; overflow: hidden; outline: 1px solid var(--cp-review-border); }
+#theme-settings { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--cp-border); }
+.theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; border: 0; padding: 0; }
+.theme-option { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; cursor: pointer; position: relative; border: 1px solid var(--cp-border-strong); border-radius: 8px; padding: 10px 6px; min-height: 82px; background: var(--cp-surface); }
+.theme-option:has(:checked) { outline: 2px solid var(--cp-accent); outline-offset: 1px; background: var(--cp-accent-soft); }
+.theme-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.theme-option:has(:focus-visible) { outline: 3px dashed var(--cp-text); outline-offset: 3px; }
+.theme-swatch { display: grid; grid-template-columns: repeat(4, 1fr); width: 72px; height: 16px; border-radius: 4px; overflow: hidden; outline: 1px solid var(--cp-border-strong); }
 .theme-name { font-size: 12px; font-weight: 650; text-align: center; }
-.review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
-.example-options { display: inline-flex; padding: 3px; border: 1px solid var(--cp-review-border); border-radius: 6px; margin: 0; background: var(--cp-review-surface); }
-.example-options label { position: relative; cursor: pointer; display: flex; align-items: center; min-height: 36px; padding: 6px 12px; border-radius: 3px; font-size: 12px; }
-.example-options label:has(:checked) { background: var(--cp-review-text); color: var(--cp-review-bg); }
-#reset-example { background: transparent; border: 0; color: var(--cp-review-muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; padding: 10px 0; min-height: 40px; }
-.review-notes { margin-top: 12px; font-size: 12px; line-height: 1.65; }
-.review-notes summary { cursor: pointer; color: var(--cp-review-text); min-height: 32px; }
-.review-notes p { margin-top: 10px; max-width: 90ch; color: var(--cp-review-muted); }
-.review-recommendation { padding-top: 8px; border-top: 1px solid var(--cp-review-border); }
-#theme-review :focus-visible { outline-color: var(--cp-review-text); }
-html[data-color-review] #app :is(.page-heading, .meals-section, .day-aside, .trend-kpis) { animation: none; }
-html[data-color-review] #app .progress-track span { transition: none; }
+.theme-daily { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-size: 13px; }
+.theme-daily input { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--cp-accent); }
+#theme-status { font-size: 12px; color: var(--cp-danger); }
+#theme-status:empty { display: none; }
 html[data-palette]:not([data-palette="original"]) body { background: linear-gradient(180deg, var(--cp-bg-elevated), var(--cp-bg) 380px); }
 html[data-palette]:not([data-palette="original"]) .site-header { background: var(--cp-header); }
 html[data-palette]:not([data-palette="original"]) .brand { color: var(--cp-header-brand); }
@@ -48,19 +28,9 @@ html[data-palette]:not([data-palette="original"]) .meal-0 { background: var(--cp
 html[data-palette]:not([data-palette="original"]) .meal-1 { background: var(--cp-meal-1-bg); color: var(--cp-meal-1-fg); }
 html[data-palette]:not([data-palette="original"]) .meal-2 { background: var(--cp-meal-2-bg); color: var(--cp-meal-2-fg); }
 html[data-palette]:not([data-palette="original"]) .meal-3 { background: var(--cp-meal-3-bg); color: var(--cp-meal-3-fg); }
-@media (max-width: 900px) {
-  .theme-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 480px) {
+  .theme-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 700px) {
-  .review-inner { padding: 16px 20px; }
-  .review-heading { gap: 6px 12px; }
-  .review-heading > span { width: 100%; order: 3; }
-  .theme-options { gap: 8px; }
-  .theme-name { font-size: 10px; }
-  .theme-swatch { width: 64px; }
-  .review-actions { gap: 8px; }
-  .review-notes summary { min-height: 60px; }
-  .example-options label { padding-inline: 9px; min-height: 40px; }
-  #reset-example { font-size: 11px; }
   html[data-palette]:not([data-palette="original"]) nav { background: var(--cp-header); }
 }

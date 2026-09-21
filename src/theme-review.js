@@ -1,5 +1,6 @@
 import './theme-review.css';
-export { createPreviewStorage, previewState } from './theme-preview.mjs';
+import { createThemePreferences } from './theme-preferences.mjs';
+import { localDate } from './model.mjs';
 
 const palette = values => ({
   '--cp-bg': values.background,
@@ -88,47 +89,36 @@ export const themes = [
     roles: 'Fond bleu nuit ; texte blanc bleuté ; boutons cobalt clair à texte sombre ; protéines abricot ; repas or, bleu, abricot et rose. Focus or clair.',
     tokens: palette({ background: '#17233c', surface: '#22324e', soft: '#344563', border: '#4e6384', text: '#f1f4ff', muted: '#bdcbe5', accent: '#a6c0ff', hover: '#c5d5ff', accentText: '#172950', tint: '#304474', secondary: '#f2c479', sun: '#f2d38d', focus: '#ffe0a2', header: '#1b3057', calorieSurface: '#293c62', proteinSurface: '#3c3536', inputBorder: '#92a8cc', morning: '#494030', evening: '#443449', eveningText: '#efacb7' }),
   },
+  { id: 'original', name: 'Cerise Classique', swatches: ['#b11f4b', '#0078d4', '#ffffff', '#f7f4ef'], tokens: {} },
 ];
 
-const original = { id: 'original', name: 'Actuelle · claire', swatches: ['#b11f4b', '#0078d4', '#ffffff', '#f7f4ef'], personality: 'Calme, propre, un peu trop sage.', fit: 'Une base lisible et rassurante. Mais le bordeaux discret, les surfaces blanches et le bleu familier des statistiques donnent une impression plus générique que joyeuse ou personnelle.', tradeoff: 'Peu de fatigue visuelle en plein jour ; peu de caractère. Le rouge intervient surtout en petites touches, sans vraiment donner le ton.', roles: 'Blanc et ivoire, texte gris, accent bordeaux, protéines bleues, repas pastel. La référence reste inchangée.', tokens: {} };
-
-export function mountThemeReview({ preview = false, onThemeChange, onExampleChange }) {
+export function mountThemeSettings({ onThemeChange }) {
   const root = document.documentElement;
-  const originalMode = preview ? 'light' : root.getAttribute('data-theme');
-  const requestedPalette = new URLSearchParams(location.search).get('palette');
-  const initialPalette = [...themes, original].some(theme => theme.id === requestedPalette) ? requestedPalette : preview ? 'cerise' : 'original';
-  root.setAttribute('data-color-review', '');
+  const preferences = createThemePreferences({ getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) });
   const panel = document.createElement('section');
-  panel.id = 'theme-review';
-  panel.setAttribute('aria-label', 'Comparateur de couleurs');
-  panel.innerHTML = `<div class="review-inner">
-    <div class="review-heading"><strong>Les nuits de Cerise</strong><span>${preview ? 'Bac à sable · journal personnel intact' : 'Ton journal · sur cet appareil'}</span><a id="review-mode-link" href="${preview ? '?' : '?themes'}">${preview ? 'Revenir à mon journal' : 'Essayer les exemples'}</a></div>
-    <fieldset class="theme-options"><legend class="sr-only">Palette</legend>${[...themes, original].map(theme => `<label class="theme-option"><input type="radio" name="review-theme" value="${theme.id}" ${theme.id === initialPalette ? 'checked' : ''}><span class="theme-swatch" aria-hidden="true">${theme.swatches.map(color => `<span style="background:${color}"></span>`).join('')}</span><span class="theme-name">${theme.id === 'original' && originalMode === 'dark' ? 'Actuelle · sombre' : theme.name}</span></label>`).join('')}</fieldset>
-    ${preview ? '<div class="review-actions"><fieldset class="example-options"><legend class="sr-only">État de démonstration</legend><label><input type="radio" name="review-example" value="populated" checked><span>Exemple rempli</span></label><label><input type="radio" name="review-example" value="empty"><span>Exemple vide</span></label></fieldset><button type="button" id="reset-example" title="Réinitialiser les données fictives">Réinitialiser l’exemple</button></div>' : ''}
-    <details class="review-notes"><summary id="review-summary">Avis de direction artistique</summary><div id="review-description" aria-live="polite"></div><p class="review-recommendation"><strong>Mes deux choix :</strong> Cerise Nocturne pour la chaleur et la complicité ; Rouge Pétrole pour une personnalité plus sportive et affirmée. Seules les couleurs varient. Les exemples restent identiques, modifiables et non enregistrés.</p></details>
-  </div>`;
-  document.querySelector('#app').before(panel);
+  panel.id = 'theme-settings';
+  panel.setAttribute('aria-labelledby', 'theme-settings-title');
+  panel.innerHTML = `<h3 id="theme-settings-title">Tes couleurs</h3>
+    <fieldset class="theme-options"><legend class="sr-only">Thème</legend>${themes.map(theme => `<label class="theme-option"><input type="radio" name="color-theme" value="${theme.id}"><span class="theme-swatch" aria-hidden="true">${theme.swatches.map(color => `<span style="background:${color}"></span>`).join('')}</span><span class="theme-name">${theme.name}</span></label>`).join('')}</fieldset>
+    <label class="theme-daily"><input type="checkbox" role="switch" id="daily-theme"><span>Un thème au hasard chaque jour</span></label>
+    <p id="theme-status" role="status"></p>`;
+  document.querySelector('#targets-form').before(panel);
   const keys = Object.keys(themes[0].tokens);
-  const apply = id => {
-    const selected = [...themes, original].find(theme => theme.id === id);
+  const apply = ({ state, persisted }) => {
+    const selected = themes.find(theme => theme.id === state.current);
+    const changed = root.dataset.palette !== selected.id;
     keys.forEach(key => root.style.removeProperty(key));
-    root.setAttribute('data-theme', id === 'original' ? originalMode : 'dark');
+    root.setAttribute('data-theme', selected.id === 'original' ? 'light' : 'dark');
     Object.entries(selected.tokens).forEach(([key, value]) => root.style.setProperty(key, value));
     root.dataset.palette = selected.id;
-    const currentUrl = new URL(location.href);
-    currentUrl.searchParams.set('palette', selected.id);
-    history.replaceState(null, '', currentUrl);
-    const modeUrl = new URL(currentUrl);
-    if (preview) modeUrl.searchParams.delete('themes');
-    else modeUrl.searchParams.set('themes', '');
-    panel.querySelector('#review-mode-link').href = `${modeUrl.pathname}${modeUrl.search}${modeUrl.hash}`;
-    panel.querySelector('#review-summary').textContent = `${selected.name} · ${selected.personality}${selected.recommended ? ' Mon choix.' : ''}`;
-    panel.querySelector('#review-description').innerHTML = `<p><strong>Pourquoi :</strong> ${selected.fit}</p><p><strong>Compromis :</strong> ${selected.tradeoff}</p><p><strong>Palette complète :</strong> ${selected.roles}</p>`;
-    onThemeChange();
+    panel.querySelectorAll('[name="color-theme"]').forEach(input => { input.checked = input.value === selected.id; });
+    panel.querySelector('#daily-theme').checked = state.daily;
+    panel.querySelector('#theme-status').textContent = persisted ? '' : 'Préférence non enregistrée : le stockage de ce navigateur est indisponible.';
+    if (changed) onThemeChange();
   };
-  panel.querySelectorAll('[name="review-theme"]').forEach(input => input.addEventListener('change', () => apply(input.value)));
-  const setExample = () => onExampleChange(panel.querySelector('[name="review-example"]:checked').value === 'populated');
-  panel.querySelectorAll('[name="review-example"]').forEach(input => input.addEventListener('change', setExample));
-  panel.querySelector('#reset-example')?.addEventListener('click', setExample);
-  apply(initialPalette);
+  panel.querySelectorAll('[name="color-theme"]').forEach(input => input.addEventListener('click', () => apply(preferences.select(input.value, localDate()))));
+  panel.querySelector('#daily-theme').addEventListener('change', event => apply(preferences.setDaily(event.target.checked, localDate())));
+  const refresh = () => apply(preferences.refresh(localDate()));
+  refresh();
+  return { refresh };
 }

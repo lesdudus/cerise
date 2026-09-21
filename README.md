@@ -53,17 +53,19 @@ La compilation génère `dist/index.html`, un fichier autonome avec JavaScript, 
 
 Le workflow `.github/workflows/pages.yml` teste et publie la branche `main` sur GitHub Pages. Le dépôt doit utiliser **GitHub Actions** comme source Pages. Ne pas publier de sauvegardes personnelles.
 
-## Comparaison de couleurs temporaire
+## Thèmes et rotation quotidienne
 
-Le sélecteur temporaire apparaît en haut de la page principale, en local comme sur https://lesdudus.github.io/cerise/. Il propose cinq thèmes sombres : **Cerise Nocturne**, **Rouge Pétrole**, **Rouge Studio**, **Matcha Minuit** et **Cobalt Après-Minuit**. La palette actuelle reste la référence et le choix par défaut, avec le mode clair ou sombre de l'appareil. Chaque piste comporte un avis, son adéquation au brief et son compromis dans le volet de direction artistique.
+Les six thèmes sont disponibles en haut de **Paramètres**, avant les objectifs : **Cerise Nocturne**, **Rouge Pétrole**, **Rouge Studio**, **Matcha Minuit**, **Cobalt Après-Minuit** et **Cerise Classique**. Les cinq premiers sont sombres ; Classique conserve la palette claire d'origine. La barre de comparaison et les exemples temporaires ont été retirés. Les anciens paramètres d'URL `themes` et `palette` n'activent plus de mode particulier.
 
-La page principale conserve le journal personnel et son enregistrement habituel. Changer de palette ne modifie aucune donnée du journal ; le choix est conservé dans le paramètre d'URL `palette`, pas dans le stockage du journal.
+**Un thème au hasard chaque jour** est activé par défaut. L'application mélange les six thèmes, puis les montre une fois chacun avant de recommencer. Deux cycles consécutifs ne peuvent pas afficher le même thème deux jours de suite. Le thème reste identique lors d'un rechargement dans la même journée locale. La rotation se fait à minuit si la page reste ouverte, ou lors de la prochaine ouverture/reprise ; les jours sans visite ne consomment pas de thèmes.
 
-**Essayer les exemples** ouvre le mode `?themes`, séparé du journal. Les contrôles **Exemple rempli** et **Exemple vide** utilisent les mêmes données fictives pour chaque palette. Dans ce mode, le journal personnel n'est ni lu ni modifié : saisies, objectifs et imports passent par un stockage en mémoire séparé. Les exports de démonstration portent le préfixe `cerise-exemple-`. **Réinitialiser l'exemple** rétablit les données fictives ; recharger la page abandonne les modifications de démonstration. **Revenir à mon journal** retrouve les données personnelles et conserve la palette choisie.
+Choisir manuellement un thème l'applique immédiatement et redémarre le cycle : ce thème compte comme le premier, les cinq autres sont mélangés pour les jours suivants. Même sélectionner à nouveau le thème actif redémarre le cycle. Le mode aléatoire reste activé et reprend le lendemain. Pour garder un thème indéfiniment, désactiver le mode aléatoire. Le réactiver conserve le thème actuel jusqu'au lendemain.
 
-La comparaison conserve le layout, la typographie, les images et les parcours, sur mobile et ordinateur. Sa publication est autorisée pour le choix des couleurs ; le sélecteur sera retiré après le choix définitif. Cette exploration est explicitement autorisée à sortir de la palette Clawpilot. Le module `src/theme-review.js` contient le sélecteur et les palettes ; `src/theme-review.css` contient les styles temporaires.
+La préférence, le thème courant, la date et les thèmes restants sont enregistrés dans `localStorage`, sous `cerise.themes.v1`, indépendamment de `cerise.journal.v1`. Ils sont partagés entre les onglets de la même origine et du même profil de navigateur, mais pas entre appareils ou navigateurs. Les exports/imports du journal ne modifient pas les couleurs. Si le stockage est bloqué, le thème reste utilisable pour la session et un avertissement apparaît dans Paramètres.
 
-`npm run test:e2e -- --project=themes` vérifie l'isolation, les contrastes, les états vides et remplis, les paramètres, les graphiques et la stabilité du layout, ainsi que le parcours journal/exemples dans la compilation de production. `--project=journal` conserve les tests du journal de production. Les serveurs de test utilisent les ports locaux 5213 (production) et 5214 (développement).
+`src/theme-preferences.mjs` gère la rotation et sa persistance. `src/theme-review.js` et `src/theme-review.css` contiennent les palettes permanentes et leur sélecteur. Les couleurs restent explicitement autorisées à sortir de la palette Clawpilot. Les données de démonstration de `src/theme-preview.mjs` ne servent plus qu'aux tests.
+
+`npm run test:e2e -- --project=themes` vérifie les six palettes, les contrastes, les états vides/remplis, les graphiques, la stabilité du layout et la rotation persistante. `--project=journal` conserve les tests du journal. Les serveurs de test utilisent les ports locaux 5213 (production) et 5214 (développement).
 
 ## Évolution Supabase
 

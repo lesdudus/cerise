@@ -4,7 +4,8 @@ import { createIcons, Cherry, Sunrise, Sun, Apple, Moon, ChevronLeft, ChevronRig
 import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip } from 'chart.js';
 import { MEALS, STORAGE_KEY, localDate, shiftDate, validDate, initialState, parseAmount, setEntry, setTargets, targetsFor, daySummary, periodSummary, importState, createRepository } from './model.mjs';
 import { messageFor } from './messages.mjs';
-import * as themeReview from './theme-review.js';
+import { mountThemeSettings } from './theme-review.js';
+import { THEME_KEY } from './theme-preferences.mjs';
 
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip);
 const icons = { Cherry, Sunrise, Sun, Apple, Moon, ChevronLeft, ChevronRight, CalendarDays, Settings2, X, Download, Upload, Check, Sparkles, Heart, ArrowUpRight, ChartNoAxesCombined, NotebookPen, History, ArrowLeft, RotateCw, ShieldCheck };
@@ -12,8 +13,7 @@ const icon = name => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 const number = value => value === null ? '–' : new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(value);
 const escape = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const dateLabel = (date, options = { day: 'numeric', month: 'long' }) => new Date(`${date}T12:00:00`).toLocaleDateString('fr-FR', options);
-const isPreview = new URLSearchParams(location.search).has('themes');
-const repository = createRepository(isPreview ? themeReview.createPreviewStorage(localDate()) : { getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value) });
+const repository = createRepository({ getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value) });
 let state = initialState();
 let blocked = false;
 let pending = [];
@@ -80,7 +80,7 @@ function commit(change) {
   try {
     state = repository.update(latest => pending.reduce((current, update) => update(current), latest));
     pending = [];
-    status = isPreview ? 'Exemple modifié · non enregistré' : 'Enregistré sur cet appareil';
+    status = 'Enregistré sur cet appareil';
     document.querySelector('#storage-warning').hidden = true;
     announce(status);
     updateSaveStatus();
@@ -242,6 +242,7 @@ main.addEventListener('click', event => {
 });
 
 document.querySelector('#open-settings').addEventListener('click', () => {
+  themeSettings.refresh();
   const targets = targetsFor(state, today);
   document.querySelector('#target-calories').value = String(targets.calories).replace('.', ',');
   document.querySelector('#target-protein').value = String(targets.protein).replace('.', ',');
@@ -260,7 +261,7 @@ document.querySelector('#targets-form').addEventListener('submit', event => {
     const effectiveDate = today;
     const saved = commit(current => setTargets(current, effectiveDate, calories, protein));
     document.querySelector('#targets-error').textContent = '';
-    document.querySelector('#settings-status').textContent = saved ? (isPreview ? 'Objectifs modifiés pour cet exemple uniquement.' : 'Tes objectifs sont enregistrés pour aujourd’hui et les jours suivants.') : 'Enregistrement impossible. Réessaie avant de quitter.';
+    document.querySelector('#settings-status').textContent = saved ? 'Tes objectifs sont enregistrés pour aujourd’hui et les jours suivants.' : 'Enregistrement impossible. Réessaie avant de quitter.';
     if (canNavigate()) render();
   } catch (error) { document.querySelector('#targets-error').textContent = error.message; }
 });
@@ -274,7 +275,7 @@ document.querySelector('#export-data').addEventListener('click', () => {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `cerise-${isPreview ? 'exemple-' : ''}${today}${blocked ? '-original' : ''}.json`;
+    anchor.download = `cerise-${today}${blocked ? '-original' : ''}.json`;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     document.querySelector('#settings-status').textContent = 'Sauvegarde téléchargée. Garde-la dans un endroit sûr.';
@@ -288,13 +289,13 @@ document.querySelector('#backup-file').addEventListener('change', async event =>
     if (file.size > 5 * 1024 * 1024) throw new Error('Le fichier dépasse 5 Mo.');
     const imported = importState(await file.text());
     const count = Object.keys(imported.days).length;
-    const confirmation = isPreview ? `Remplacer uniquement les données fictives de cet aperçu (${count} journée(s)) ? Ton journal personnel restera intact.` : `Remplacer tout le journal de ce navigateur par cette sauvegarde (${count} journée(s)) ? Les données actuelles, y compris les saisies non enregistrées, seront remplacées. Exporte-les d’abord si tu souhaites les conserver.`;
+    const confirmation = `Remplacer tout le journal de ce navigateur par cette sauvegarde (${count} journée(s)) ? Les données actuelles, y compris les saisies non enregistrées, seront remplacées. Exporte-les d’abord si tu souhaites les conserver.`;
     if (!window.confirm(confirmation)) return;
     const saved = repository.save(imported);
     state = saved;
     pending = [];
     blocked = false;
-    status = isPreview ? 'Exemple importé · non enregistré' : 'Sauvegarde restaurée';
+    status = 'Sauvegarde restaurée';
     document.querySelector('#storage-warning').hidden = true;
     document.querySelector('#targets-form button').disabled = false;
     const targets = targetsFor(state, today);
@@ -311,11 +312,13 @@ window.addEventListener('beforeunload', event => {
   if (pending.length || main.querySelector('[aria-invalid="true"]')) { event.preventDefault(); event.returnValue = ''; }
 });
 window.addEventListener('storage', event => {
-  if (isPreview || event.key !== STORAGE_KEY || pending.length || main.querySelector('[aria-invalid="true"]')) return;
+  if (event.key === THEME_KEY || event.key === null) themeSettings.refresh();
+  if (event.key !== STORAGE_KEY || pending.length || main.querySelector('[aria-invalid="true"]')) return;
   try { state = repository.load(); render(); }
   catch { announce('Les données ont changé dans un autre onglet et ne peuvent pas être lues.'); }
 });
 function checkNewDay() {
+  themeSettings.refresh();
   const next = localDate();
   if (next === today) return;
   const wasToday = selectedDate === today;
@@ -326,15 +329,7 @@ function checkNewDay() {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewDay(); });
 window.addEventListener('focus', checkNewDay);
 setInterval(checkNewDay, 30000);
-render();
-if (isPreview) {
-  status = 'Données fictives · non enregistrées';
-  updateSaveStatus();
-  document.querySelector('.backup-section .muted').textContent = 'Dans cet aperçu, saisies, objectifs et imports restent en mémoire. L’export contient uniquement les données fictives. Ton journal personnel n’est ni lu ni modifié.';
-  document.querySelector('.dialog-note span').textContent = 'Exemple · aucune modification du journal personnel.';
-}
-themeReview.mountThemeReview({
-    preview: isPreview,
+const themeSettings = mountThemeSettings({
     onThemeChange() {
       if (!chart) return;
       const styles = getComputedStyle(document.documentElement);
@@ -349,15 +344,5 @@ themeReview.mountThemeReview({
       chart.options.scales.y.grid.color = border;
       chart.update('none');
     },
-    onExampleChange(populated) {
-      if (!isPreview) return;
-      state = repository.save(themeReview.previewState(today, populated));
-      pending = [];
-      blocked = false;
-      selectedDate = today;
-      historyMonth = today.slice(0, 7);
-      status = 'Données fictives · non enregistrées';
-      render();
-      updateSaveStatus();
-    },
 });
+render();

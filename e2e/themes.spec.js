@@ -1,11 +1,18 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { readFile } from 'node:fs/promises';
-import { initialState, setEntry, STORAGE_KEY } from '../src/model.mjs';
+import { STORAGE_KEY, shiftDate } from '../src/model.mjs';
+import { previewState } from '../src/theme-preview.mjs';
+import { THEME_IDS, THEME_KEY } from '../src/theme-preferences.mjs';
 
-const palettes = ['cerise', 'petrole', 'studio', 'matcha', 'cobalt'];
-const selectPalette = (page, id) => page.locator(`[name="review-theme"][value="${id}"]`).check();
-const selectExample = (page, id) => page.locator(`[name="review-example"][value="${id}"]`).check();
+const palettes = THEME_IDS;
+const themeState = page => page.evaluate(key => JSON.parse(localStorage.getItem(key)), THEME_KEY);
+const seedJournal = page => page.addInitScript(({ key, value }) => localStorage.setItem(key, value), { key: STORAGE_KEY, value: JSON.stringify(previewState('2026-09-21')) });
+async function selectPalette(page, id) {
+  await page.locator('#open-settings').click();
+  await page.locator('.theme-option').filter({ has: page.locator(`input[value="${id}"]`) }).click();
+  await page.keyboard.press('Escape');
+}
 
 async function assertAccessible(page) {
   const result = await new AxeBuilder({ page }).analyze();
@@ -20,15 +27,17 @@ for (const width of [1440, 390]) {
   for (const palette of palettes) {
     test(`${palette} à ${width}px : contrastes, états, paramètres et graphiques`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 950 });
-      await page.goto('/?themes');
+      await seedJournal(page);
+      await page.goto('/');
       await selectPalette(page, palette);
-      await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', palette === 'original' ? 'light' : 'dark');
       await expect(page.locator('.calories .metric-total strong')).toHaveText(/1\s020/);
       await expect(page.locator('.protein .metric-total strong')).toHaveText('70');
       await expect(page.locator('.quote-layout img')).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`${palette}-${width}-populated.png`), fullPage: true });
       await assertAccessible(page);
       const contrastChecks = await page.evaluate(() => {
+        if (document.documentElement.dataset.palette === 'original') return [];
         const style = getComputedStyle(document.documentElement);
         const luminance = token => {
           const hex = style.getPropertyValue(token).trim().slice(1);
@@ -46,19 +55,23 @@ for (const width of [1440, 390]) {
         });
       });
       expect(contrastChecks.filter(check => check.ratio < 3)).toEqual([]);
-      await selectExample(page, 'empty');
+      for (const input of await page.locator('[data-meal]').all()) await input.fill('');
       await expect(page.locator('.calories .metric-total strong')).toHaveText('–');
       await expect(page.locator('#breakfast-calories')).toHaveValue('');
       await page.screenshot({ path: testInfo.outputPath(`${palette}-${width}-empty.png`), fullPage: true });
       await assertAccessible(page);
       await page.getByRole('button', { name: 'Paramètres', exact: true }).click();
+      await page.getByRole('dialog').screenshot({ path: testInfo.outputPath(`${palette}-${width}-settings.png`) });
+      expect(await page.locator('#theme-settings').evaluate(element => element.getBoundingClientRect().top < document.querySelector('#targets-form').getBoundingClientRect().top)).toBe(true);
+      expect(await page.getByRole('dialog').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
       await assertAccessible(page);
       await page.locator('#target-calories').fill('0');
       await page.getByRole('button', { name: 'Enregistrer les objectifs' }).click();
       await expect(page.locator('#targets-error')).toBeVisible();
       await assertAccessible(page);
       await page.keyboard.press('Escape');
-      await selectExample(page, 'populated');
+      await page.locator('#breakfast-calories').fill('350');
+      await page.locator('#breakfast-protein').fill('22,5');
       await page.locator('[data-view="trends"]').click();
       const painted = await page.locator('canvas').evaluate(canvas => {
         const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
@@ -67,63 +80,34 @@ for (const width of [1440, 390]) {
       expect(painted).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`${palette}-${width}-trends.png`), fullPage: true });
       await assertAccessible(page);
-      const overflow = await page.evaluate(() => ({ page: document.documentElement.scrollWidth > innerWidth, controls: [...document.querySelectorAll('.theme-option, .review-inner, .metric-card, .section-heading')].filter(element => element.scrollWidth > element.clientWidth + 1).map(element => element.className) }));
+      const overflow = await page.evaluate(() => ({ page: document.documentElement.scrollWidth > innerWidth, controls: [...document.querySelectorAll('.theme-option, .metric-card, .section-heading')].filter(element => element.scrollWidth > element.clientWidth + 1).map(element => element.className) }));
       expect(overflow).toEqual({ page: false, controls: [] });
     });
   }
 }
 
-test('La comparaison ne lit ni ne modifie le journal personnel, même après import et réglages', async ({ page }) => {
-  const personal = setEntry(initialState(), '2026-09-21', 'dinner', 'calories', 643);
-  const serialized = JSON.stringify(personal);
-  await page.addInitScript(({ key, serialized }) => {
-    const originalGet = Storage.prototype.getItem;
-    const originalSet = Storage.prototype.setItem;
-    originalSet.call(localStorage, key, serialized);
-    window.previewStorageCalls = [];
-    window.readPersonalJournal = () => originalGet.call(localStorage, key);
-    Storage.prototype.getItem = function (name) {
-      if (this === localStorage) window.previewStorageCalls.push(`read:${name}`);
-      return originalGet.call(this, name);
-    };
-    Storage.prototype.setItem = function (name, value) {
-      if (this === localStorage) window.previewStorageCalls.push(`write:${name}`);
-      return originalSet.call(this, name, value);
-    };
-  }, { key: STORAGE_KEY, serialized });
-  await page.goto('/?themes');
-  await expect(page.locator('#dinner-calories')).toHaveValue('');
-  await page.locator('#dinner-calories').fill('420');
+test('Les couleurs ne modifient pas le journal ni ses sauvegardes', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#dinner-calories').fill('643');
+  const personal = await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY);
   for (const palette of palettes) {
     await selectPalette(page, palette);
-    await expect(page.locator('#dinner-calories')).toHaveValue('420');
+    await expect(page.locator('#dinner-calories')).toHaveValue('643');
   }
+  expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBe(personal);
   await page.getByRole('button', { name: 'Paramètres', exact: true }).click();
-  await page.locator('#target-calories').fill('1800');
-  await page.getByRole('button', { name: 'Enregistrer les objectifs' }).click();
   const downloadPromise = page.waitForEvent('download');
   await page.locator('#export-data').click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toContain('exemple');
   const exported = JSON.parse(await readFile(await download.path(), 'utf8'));
-  expect(exported.days['2026-09-21'].dinner.calories).toBe(420);
-  page.once('dialog', prompt => prompt.accept());
-  await page.locator('#backup-file').setInputFiles({ name: 'test.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(initialState())) });
-  await expect(page.locator('#settings-status')).toContainText('restaurée');
-  await page.keyboard.press('Escape');
-  await selectExample(page, 'empty');
-  await selectExample(page, 'populated');
-  expect(await page.evaluate(() => window.previewStorageCalls)).toEqual([]);
-  expect(await page.evaluate(() => window.readPersonalJournal())).toBe(serialized);
-  await page.goto('/');
-  await expect(page.locator('#theme-review')).toBeVisible();
-  await expect(page.locator('#dinner-calories')).toHaveValue('643');
+  expect(exported).toEqual(JSON.parse(personal));
 });
 
 test('Mise en page, typographie et graphiques restent identiques entre palettes', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const chartModuleResponse = page.waitForResponse(response => response.url().includes('/chart__js.js?v='));
-  await page.goto('/?themes');
+  await seedJournal(page);
+  await page.goto('/');
   const chartModuleUrl = (await chartModuleResponse).url();
   const geometry = () => page.evaluate(() => {
     const origin = document.querySelector('#main').getBoundingClientRect();
@@ -134,7 +118,7 @@ test('Mise en page, typographie et graphiques restent identiques entre palettes'
     });
   });
   const original = await geometry();
-  for (const palette of [...palettes, 'original']) {
+  for (const palette of palettes) {
     await selectPalette(page, palette);
     expect(await geometry()).toEqual(original);
   }
@@ -152,7 +136,7 @@ test('Mise en page, typographie et graphiques restent identiques entre palettes'
     expect(details.values).toEqual(before.values);
     colors.add(details.color);
   }
-  expect(colors.size).toBe(5);
+  expect(colors.size).toBe(6);
   await page.locator('[data-metric-view="protein"]').click();
   for (const palette of palettes) {
     await selectPalette(page, palette);
@@ -161,14 +145,19 @@ test('Mise en page, typographie et graphiques restent identiques entre palettes'
   }
 });
 
-test('Choix au clavier, petits écrans et avis', async ({ page }) => {
+test('Choix au clavier et paramètres sur petit écran', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 850 });
-  await page.goto('/?themes');
-  await page.locator('[name="review-theme"][value="cerise"]').focus();
+  await page.goto('/');
+  await selectPalette(page, 'cerise');
+  await page.locator('#open-settings').click();
+  await page.locator('[name="color-theme"][value="cerise"]').focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'petrole');
-  await page.locator('#review-summary').click();
-  await expect(page.locator('#review-description')).toContainText('Compromis');
+  expect((await themeState(page)).current).toBe('petrole');
+  await page.locator('#daily-theme').focus();
+  await page.keyboard.press('Space');
+  expect((await themeState(page)).daily).toBe(false);
+  expect(await page.getByRole('dialog').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await assertAccessible(page);
 });
@@ -176,40 +165,75 @@ test('Choix au clavier, petits écrans et avis', async ({ page }) => {
 test.describe('Production', () => {
   test.use({ baseURL: 'http://127.0.0.1:5213' });
 
-  test('Le sélecteur conserve le journal et sépare les exemples', async ({ page }) => {
+  test('Rotation quotidienne, rechargement, cycle complet, choix manuel et mode fixe', async ({ page, context }) => {
     await page.goto('/');
-    await expect(page.locator('[name="review-theme"]')).toHaveCount(6);
-    await expect(page.locator('html')).toHaveAttribute('data-palette', 'original');
-    await expect(page.locator('[name="review-example"]')).toHaveCount(0);
+    await expect(page.locator('#theme-review')).toHaveCount(0);
+    await expect(page.locator('[name="color-theme"]')).toHaveCount(6);
     await page.locator('#dinner-calories').fill('643');
     const personal = await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY);
-    await page.evaluate(() => {
-      const originalSet = Storage.prototype.setItem;
-      window.paletteWrites = [];
-      Storage.prototype.setItem = function (key, value) {
-        window.paletteWrites.push(key);
-        return originalSet.call(this, key, value);
-      };
-    });
-    for (const palette of palettes) {
-      await selectPalette(page, palette);
-      await expect(page.locator('#dinner-calories')).toHaveValue('643');
-    }
-    expect(await page.evaluate(() => window.paletteWrites)).toEqual([]);
+    const first = await themeState(page);
+    expect(first.daily).toBe(true);
     await page.reload();
-    await expect(page.locator('html')).toHaveAttribute('data-palette', 'cobalt');
-    await page.getByRole('link', { name: 'Essayer les exemples' }).click();
-    await expect(page.locator('#dinner-calories')).toHaveValue('');
-    await expect(page.locator('html')).toHaveAttribute('data-palette', 'cobalt');
-    await selectExample(page, 'empty');
-    await expect(page.locator('#breakfast-calories')).toHaveValue('');
-    await selectExample(page, 'populated');
-    await page.locator('#dinner-calories').fill('420');
+    expect(await themeState(page)).toEqual(first);
+    const seen = [first.current];
+    for (let offset = 1; offset < 6; offset += 1) {
+      await page.clock.setSystemTime(new Date(`${shiftDate('2026-09-21', offset)}T12:00:00+02:00`));
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      const state = await themeState(page);
+      expect(state.remaining.length).toBe(5 - offset);
+      seen.push(state.current);
+    }
+    expect(new Set(seen).size).toBe(6);
     await selectPalette(page, 'petrole');
-    expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBe(personal);
-    await page.getByRole('link', { name: 'Revenir à mon journal' }).click();
+    expect((await themeState(page)).remaining.sort()).toEqual(palettes.filter(id => id !== 'petrole').sort());
+    await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-palette', 'petrole');
-    await expect(page.locator('#dinner-calories')).toHaveValue('643');
+    await page.clock.setSystemTime(new Date('2026-09-26T23:59:45+02:00'));
+    await page.clock.runFor(45000);
+    expect((await themeState(page)).remaining.length).toBe(4);
+    await expect(page.locator('html')).not.toHaveAttribute('data-palette', 'petrole');
+    await page.locator('#open-settings').click();
+    await page.locator('#daily-theme').uncheck();
+    await page.keyboard.press('Escape');
+    await selectPalette(page, 'original');
+    await page.clock.setSystemTime(new Date('2026-10-26T12:00:00+01:00'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-palette', 'original');
+    const other = await context.newPage();
+    await other.clock.install({ time: new Date('2026-10-26T12:00:00+01:00') });
+    await other.goto('/');
+    await selectPalette(other, 'studio');
+    await expect(page.locator('html')).toHaveAttribute('data-palette', 'studio');
+    expect((await themeState(page)).daily).toBe(false);
+    await page.locator('#open-settings').click();
+    await page.locator('#daily-theme').check();
+    await page.keyboard.press('Escape');
+    await page.clock.setSystemTime(new Date('2026-10-27T12:00:00+01:00'));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page.locator('html')).not.toHaveAttribute('data-palette', 'studio');
+    expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBe(personal);
+  });
+
+  test('Stockage de thème défaillant et préférences invalides ne bloquent pas le journal', async ({ page }) => {
+    await page.addInitScript(key => {
+      localStorage.setItem(key, '{invalid');
+      const originalSet = Storage.prototype.setItem;
+      window.restoreThemeStorage = () => { Storage.prototype.setItem = originalSet; };
+      Storage.prototype.setItem = function (name, value) {
+        if (name === key) throw new Error('Quota');
+        return originalSet.call(this, name, value);
+      };
+    }, THEME_KEY);
+    await page.goto('/');
+    await page.locator('#dinner-calories').fill('643');
+    const personal = await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY);
+    await selectPalette(page, 'matcha');
+    await page.locator('#open-settings').click();
+    await expect(page.locator('#theme-status')).toContainText('non enregistrée');
+    await page.evaluate(() => window.restoreThemeStorage());
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page.locator('#theme-status')).toBeHidden();
+    expect((await themeState(page)).current).toBe('matcha');
     expect(await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY)).toBe(personal);
   });
 });
