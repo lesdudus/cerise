@@ -2,6 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialState, parseAmount, setEntry, setTargets, targetsFor, daySummary, periodSummary, importState, validateState, validDate, shiftDate, localDate, createRepository, STORAGE_KEY } from '../src/model.mjs';
 import { messages, messageFor } from '../src/messages.mjs';
+import { createPreviewStorage, previewState } from '../src/theme-preview.mjs';
+
+test('La comparaison utilise des exemples identiques et un stockage uniquement en mémoire', () => {
+  const date = '2026-09-21';
+  assert.deepEqual(previewState(date), previewState(date));
+  assert.deepEqual(previewState(date, false), initialState());
+  const first = createRepository(createPreviewStorage(date));
+  const second = createRepository(createPreviewStorage(date));
+  assert.equal(daySummary(first.load(), date).calories.total, 1020);
+  assert.equal(daySummary(first.load(), date).protein.total, 70);
+  first.update(state => setEntry(state, date, 'dinner', 'protein', 35));
+  assert.equal(daySummary(first.load(), date).protein.total, 105);
+  assert.equal(daySummary(second.load(), date).protein.total, 70);
+  first.save(initialState());
+  assert.deepEqual(first.load(), initialState());
+  assert.deepEqual(second.load(), previewState(date));
+});
 
 test('Les pensées quotidiennes restent stables et tournent sans répétition immédiate', () => {
   assert.ok(messages.length >= 60);

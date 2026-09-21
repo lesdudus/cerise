@@ -100,7 +100,7 @@ test('Les graphiques excluent les jours absents et restent accessibles', async (
   expect(painted).toBe(true);
   await page.locator('[data-duration="30"]').click();
   await page.locator('[data-metric-view="protein"]').click();
-  await page.locator('summary').click();
+  await page.locator('.data-details summary').click();
   await expect(page.locator('tbody tr')).toHaveCount(30);
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) }))).toEqual([]);
@@ -115,6 +115,8 @@ for (const width of [1440, 768, 390, 320]) {
     await expect(page.locator('.quote-layout img')).toBeVisible();
     expect(await page.locator('.quote-layout img').evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
     if (width === 390) {
+      await expect(page.locator('#theme-review')).toBeVisible();
+      await page.evaluate(() => window.scrollTo(0, document.querySelector('#app').offsetTop));
       const firstViewport = await page.evaluate(() => ({
         quoteVisible: document.querySelector('.daily-note').getBoundingClientRect().bottom < innerHeight - 72,
         summaryVisible: document.querySelector('#day-summary').getBoundingClientRect().bottom < innerHeight - 72,

@@ -53,6 +53,18 @@ La compilation génère `dist/index.html`, un fichier autonome avec JavaScript, 
 
 Le workflow `.github/workflows/pages.yml` teste et publie la branche `main` sur GitHub Pages. Le dépôt doit utiliser **GitHub Actions** comme source Pages. Ne pas publier de sauvegardes personnelles.
 
+## Comparaison de couleurs temporaire
+
+Le sélecteur temporaire apparaît en haut de la page principale, en local comme sur https://lesdudus.github.io/cerise/. Il propose cinq thèmes sombres : **Cerise Nocturne**, **Rouge Pétrole**, **Rouge Studio**, **Matcha Minuit** et **Cobalt Après-Minuit**. La palette actuelle reste la référence et le choix par défaut, avec le mode clair ou sombre de l'appareil. Chaque piste comporte un avis, son adéquation au brief et son compromis dans le volet de direction artistique.
+
+La page principale conserve le journal personnel et son enregistrement habituel. Changer de palette ne modifie aucune donnée du journal ; le choix est conservé dans le paramètre d'URL `palette`, pas dans le stockage du journal.
+
+**Essayer les exemples** ouvre le mode `?themes`, séparé du journal. Les contrôles **Exemple rempli** et **Exemple vide** utilisent les mêmes données fictives pour chaque palette. Dans ce mode, le journal personnel n'est ni lu ni modifié : saisies, objectifs et imports passent par un stockage en mémoire séparé. Les exports de démonstration portent le préfixe `cerise-exemple-`. **Réinitialiser l'exemple** rétablit les données fictives ; recharger la page abandonne les modifications de démonstration. **Revenir à mon journal** retrouve les données personnelles et conserve la palette choisie.
+
+La comparaison conserve le layout, la typographie, les images et les parcours, sur mobile et ordinateur. Sa publication est autorisée pour le choix des couleurs ; le sélecteur sera retiré après le choix définitif. Cette exploration est explicitement autorisée à sortir de la palette Clawpilot. Le module `src/theme-review.js` contient le sélecteur et les palettes ; `src/theme-review.css` contient les styles temporaires.
+
+`npm run test:e2e -- --project=themes` vérifie l'isolation, les contrastes, les états vides et remplis, les paramètres, les graphiques et la stabilité du layout, ainsi que le parcours journal/exemples dans la compilation de production. `--project=journal` conserve les tests du journal de production. Les serveurs de test utilisent les ports locaux 5213 (production) et 5214 (développement).
+
 ## Évolution Supabase
 
 La persistance est isolée dans `createRepository` dans `src/model.mjs`. L'interface travaille sur un document versionné contenant `days` et `targets`. Une future implémentation pourra conserver ce contrat derrière une API asynchrone.
